@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SA Opportunity Management Tracker</title>
+<!-- Firebase (free Firestore cloud database) - loaded from CDN, no install needed -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<style>
+:root{--navy:#17365d;--blue:#2f75b5;--light:#f4f7fb;--border:#d9e2f0;--green:#2e7d32;--red:#c62828;--orange:#ef6c00;--gray:#667085}
+*{box-sizing:border-box} body{margin:0;font-family:Segoe UI,Arial,sans-serif;background:var(--light);color:#172033}
+header{background:linear-gradient(135deg,#17365d,#2f75b5);color:#fff;padding:18px 24px;display:flex;align-items:center;justify-content:space-between;gap:15px}
+header h1{margin:0;font-size:22px} header small{opacity:.85}
+button{border:0;border-radius:6px;padding:9px 13px;cursor:pointer;font-weight:600}
+.btn{background:var(--blue);color:#fff}.btn.secondary{background:#eef3f8;color:#17365d}.btn.danger{background:#c62828;color:#fff}.btn.green{background:#2e7d32;color:#fff}
+nav{display:flex;gap:6px;background:#fff;border-bottom:1px solid var(--border);padding:8px 16px;position:sticky;top:0;z-index:10;overflow:auto}
+nav button{background:#fff;color:#344054;white-space:nowrap} nav button.active{background:#17365d;color:#fff}
+main{padding:18px;max-width:1800px;margin:auto}.view{display:none}.view.active{display:block}
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:14px}
+.toolbar input,.toolbar select,.form-grid input,.form-grid select,.form-grid textarea{padding:9px;border:1px solid #cbd5e1;border-radius:6px;background:#fff}
+.toolbar input{min-width:220px}
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(160px,1fr));gap:12px;margin-bottom:18px}
+.card{background:#fff;border:1px solid var(--border);border-radius:10px;padding:14px;box-shadow:0 2px 8px #17365d12}.card .label{font-size:12px;color:var(--gray);font-weight:700}.card .value{font-size:24px;font-weight:800;margin-top:5px;color:var(--navy)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}.panel{background:#fff;border:1px solid var(--border);border-radius:10px;padding:15px;margin-bottom:16px;overflow:auto}
+.panel h3{margin:0 0 12px;color:var(--navy)}
+table{border-collapse:collapse;width:100%;min-width:1100px;background:#fff}th,td{border:1px solid var(--border);padding:8px;font-size:12px;text-align:left;vertical-align:top}th{background:#17365d;color:#fff;position:sticky;top:0;z-index:2}tr:nth-child(even) td{background:#fafcff}
+.status-open{color:#1565c0;font-weight:700}.status-won{color:var(--green);font-weight:700}.status-lost,.status-dropped{color:var(--red);font-weight:700}.status-onhold{color:var(--orange);font-weight:700}
+.progress{height:10px;background:#e9eef5;border-radius:8px;overflow:hidden}.progress>span{display:block;height:100%;background:var(--blue)}
+.modal{position:fixed;inset:0;background:#0008;display:none;align-items:center;justify-content:center;z-index:100}.modal.show{display:flex}.modal-box{background:#fff;border-radius:12px;width:min(1100px,96vw);max-height:92vh;overflow:auto;padding:20px}.modal-head{display:flex;justify-content:space-between;align-items:center}
+.form-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.form-grid label{font-size:12px;font-weight:700;color:#475467}.field{display:flex;flex-direction:column;gap:4px}.field.full{grid-column:1/-1}.field textarea{min-height:70px;resize:vertical}
+.login{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#17365d,#2f75b5)}.login-box{width:min(430px,92vw);background:#fff;padding:28px;border-radius:14px;box-shadow:0 20px 60px #0004}.login-box h2{margin-top:0;color:var(--navy)}.login-box input{width:100%;padding:12px;margin:8px 0;border:1px solid #cbd5e1;border-radius:7px}
+.badge{display:inline-block;padding:3px 8px;border-radius:12px;background:#edf2f7;font-size:11px;font-weight:700}
+.muted{color:var(--gray);font-size:12px}.right{text-align:right}.empty{padding:25px;text-align:center;color:#667085}
+@media(max-width:1100px){.kpis{grid-template-columns:repeat(2,1fr)}.grid2{grid-template-columns:1fr}.form-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:650px){.kpis{grid-template-columns:1fr}.form-grid{grid-template-columns:1fr}header{padding:14px}main{padding:10px}}
+</style>
+</head>
+<body>
+
+<div id="loginScreen" class="login">
+  <div class="login-box">
+    <h2>SA Opportunity Tracker</h2>
+    <p class="muted">Browser-based opportunity management system</p>
+    <input id="loginUser" placeholder="Select user">
+    <select id="loginSelect" style="width:100%;padding:12px;border:1px solid #cbd5e1;border-radius:7px">
+      <option value="">-- Select SA / Admin --</option>
+    </select>
+    <input id="loginPass" type="password" placeholder="Password">
+    <button class="btn" style="width:100%;margin-top:8px" onclick="login()">Login</button>
+    <p id="loginMsg" style="color:#c62828;font-size:13px"></p>
+  </div>
+</div>
+
+<div id="app" style="display:none">
+<header>
+  <div><h1>SA Opportunity Management Dashboard</h1><small id="welcome"></small></div>
+  <div style="display:flex;align-items:center;gap:12px"><span id="syncStatus" class="badge" style="background:#ffffff33;color:#fff">● connecting…</span><button class="btn secondary" onclick="logout()">Logout</button></div>
+</header>
+<nav id="nav"></nav>
+<main>
+  <section id="dashboard" class="view"></section>
+  <section id="opps" class="view"></section>
+  <section id="mySheet" class="view"></section>
+  <section id="settings" class="view"></section>
+</main>
+</div>
+
+<div id="modal" class="modal"><div class="modal-box">
+  <div class="modal-head"><h2 id="modalTitle">Opportunity</h2><button class="btn secondary" onclick="closeModal()">Close</button></div>
+  <div id="formArea"></div>
+</div></div>
+
+<script>
+const USERS={
+ "Akash Shewale":"1001","Hemant Bhagwat":"1002","Harshal Vispute":"1003",
+ "Rushikesh Ahire":"1004","Vishal Patra":"1005","Mohandass Rajendran":"1006",
+ "Jeevan Kumar":"1007","Admin":"9000"
+};
+const FIELDS=[
+ ["dateReceived","Date Received","date"],["potId","POT ID","text"],["description","Opportunity Description","text"],
+ ["customer","Customer Name","text"],["customerType","Customer Type","select",["BFSI","Government","PSU","Enterprise","Other"]],
+ ["type","Opportunity Type","select",["Hosting","SOC","Colocation","Hardware","Cloud","Private Cloud","DR","Backup","Cyber Security","Network","Managed Services","Other"]],
+ ["tenure","Tenure (Months)","number"],["mrc","MRC","number"],["arc","ARC","number"],["otc","OTC","number"],
+ ["bidDesk","Bid Desk Person","text"],["dueDate","Submission Due Date","date"],["actualDate","Actual Submission Date","date"],
+ ["stage","Current Stage","select",["RFP Analysis","Pre-Bid Queries","Queries Response","Compliance","Commercial Working","Technical Proposal","Presentation","Submission","Negotiation"]],
+ ["submissionStatus","Submission Status","select",["Not Started","In Progress","Submitted","Completed"]],
+ ["status","Opportunity Status","select",["Open","Won","Lost","Dropped","On Hold"]],
+ ["remarks","Remarks","textarea"]
+];
+const stages=["RFP Analysis","Pre-Bid Queries","Queries Response","Compliance","Commercial Working","Technical Proposal","Presentation","Submission","Negotiation"];
+const TYPES=["Hosting","SOC","Colocation","Hardware","Cloud","Private Cloud","DR","Backup","Cyber Security","Network","Managed Services","Other"];
+let currentUser=null, editingId=null, currentView="dashboard", seeded=false;
+
+// ====================================================================
+// FIREBASE CLOUD DATABASE (free Firestore project) - SHARED, LIVE SYNC
+// Every user/browser/device that opens this page connects to the SAME
+// database, so add/edit/delete by any SA is instantly visible to Admin
+// and everyone else. Replace the values below with YOUR OWN free
+// Firebase project keys (see setup notes at the end of this file).
+// ====================================================================
+const firebaseConfig={
+ apiKey:"YOUR_API_KEY",
+ authDomain:"YOUR_PROJECT_ID.firebaseapp.com",
+ projectId:"YOUR_PROJECT_ID",
+ storageBucket:"YOUR_PROJECT_ID.appspot.com",
+ messagingSenderId:"YOUR_SENDER_ID",
+ appId:"YOUR_APP_ID"
+};
+firebase.initializeApp(firebaseConfig);
+const db=firebase.firestore();
+const oppsCol=db.collection("opportunities");
+
+let DATA=[]; // in-memory cache kept in sync with Firestore in real time
+
+function loadData(){return DATA} // all existing render code stays untouched
+
+function startSync(){
+ oppsCol.onSnapshot(snap=>{
+  DATA=snap.docs.map(d=>({id:d.id,...d.data()}));
+  setSyncStatus(true);
+  seedIfEmpty();
+  rerenderCurrent();
+ },err=>{
+  console.error(err);
+  setSyncStatus(false);
+ });
+}
+function setSyncStatus(ok){
+ const el=document.getElementById("syncStatus");
+ if(!el)return;
+ el.textContent=ok?"● live":"● offline";
+ el.style.color=ok?"#8bffa0":"#ffb3b3";
+}
+function rerenderCurrent(){
+ if(!currentUser)return;
+ renderDashboard();
+ if(currentView==="opps")refreshall();
+ if(currentView==="mySheet")refreshmy();
+}
+function seedIfEmpty(){
+ if(seeded)return; seeded=true;
+ if(DATA.length)return;
+ oppsCol.add({owner:"Akash Shewale",dateReceived:"2026-08-21",potId:"21",description:"KDCCB",customer:"SOC",customerType:"BFSI",type:"SOC",tenure:60,mrc:5500,arc:66000,otc:12000,bidDesk:"Mr. Milind",dueDate:"2026-09-21",actualDate:"2026-09-21",stage:"Technical Proposal",submissionStatus:"In Progress",status:"Open",remarks:"MFA"}).catch(e=>console.error(e));
+}
+function openDays(o){
+ if(!o.dateReceived)return "";
+ const start=new Date(o.dateReceived+"T00:00:00");
+ let end;
+ if(o.status==="Open"||o.status==="On Hold"||!o.status) end=new Date();
+ else if(o.actualDate) end=new Date(o.actualDate+"T00:00:00");
+ else end=new Date();
+ return Math.max(0,Math.floor((end-start)/86400000));
+}
+function tcv(o){return (Number(o.tenure)||0)*(Number(o.mrc)||0)+(Number(o.otc)||0)}
+function arc(o){return (Number(o.mrc)||0)*12}
+function money(n){return "₹"+Number(n||0).toLocaleString("en-IN",{maximumFractionDigits:0})}
+function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]))}
+function statusClass(s){return "status-"+String(s||"").toLowerCase().replace(/\s/g,"")}
+function login(){
+ const u=document.getElementById("loginSelect").value,p=document.getElementById("loginPass").value;
+ if(USERS[u]===p){currentUser=u;document.getElementById("loginScreen").style.display="none";document.getElementById("app").style.display="block";document.getElementById("welcome").textContent="Logged in as "+u;buildNav();showView(currentUser==="Admin"?"dashboard":"mySheet")}
+ else document.getElementById("loginMsg").textContent="Incorrect password.";
+}
+function logout(){currentUser=null;document.getElementById("app").style.display="none";document.getElementById("loginScreen").style.display="flex";document.getElementById("loginPass").value=""}
+function buildNav(){
+ let n=document.getElementById("nav");
+ n.innerHTML="";
+ if(currentUser==="Admin"){["dashboard","opps","settings"].forEach((v,i)=>addNav(v,["Dashboard","All Opportunities","Settings"][i]))}
+ else {["mySheet","dashboard"].forEach((v,i)=>addNav(v,[currentUser+" – My Opportunities","Dashboard"][i]))}
+}
+function addNav(v,label){let b=document.createElement("button");b.id="nav_"+v;b.textContent=label;b.onclick=()=>showView(v);document.getElementById("nav").appendChild(b)}
+function showView(v){
+ currentView=v;
+ document.querySelectorAll(".view").forEach(x=>x.classList.remove("active"));document.getElementById(v).classList.add("active");
+ document.querySelectorAll("nav button").forEach(x=>x.classList.remove("active"));document.getElementById("nav_"+v)?.classList.add("active");
+ if(v==="dashboard")renderDashboard(); if(v==="opps")renderAll(); if(v==="mySheet")renderMy(); if(v==="settings")renderSettings();
+}
+function renderDashboard(){
+ const d=loadData(), total=d.length, open=d.filter(x=>x.status==="Open"),won=d.filter(x=>x.status==="Won"),lost=d.filter(x=>x.status==="Lost");
+ const pipe=open.reduce((a,x)=>a+tcv(x),0), wonT=won.reduce((a,x)=>a+tcv(x),0);
+ const avg=open.length?Math.round(open.reduce((a,x)=>a+openDays(x),0)/open.length):0;
+ let saRows=Object.keys(USERS).filter(x=>x!=="Admin").map(u=>{let a=d.filter(x=>x.owner===u),o=a.filter(x=>x.status==="Open");return `<tr><td>${esc(u)}</td><td>${a.length}</td><td>${o.length}</td><td>${money(o.reduce((s,x)=>s+tcv(x),0))}</td><td>${a.filter(x=>x.status==="Won").length}</td><td>${money(a.filter(x=>x.status==="Won").reduce((s,x)=>s+tcv(x),0))}</td><td>${Math.round(o.length?o.reduce((s,x)=>s+openDays(x),0)/o.length:0)}</td></tr>`}).join("");
+ let typeRows=TYPES.map(t=>{let a=d.filter(x=>x.type===t);return `<tr><td>${t}</td><td>${a.length}</td><td>${money(a.reduce((s,x)=>s+tcv(x),0))}</td><td>${a.filter(x=>x.status==="Won").length}</td></tr>`}).join("");
+ let stageRows=stages.map(s=>{let a=d.filter(x=>x.stage===s);return `<tr><td>${s}</td><td>${a.length}</td><td>${money(a.reduce((z,x)=>z+tcv(x),0))}</td></tr>`}).join("");
+ document.getElementById("dashboard").innerHTML=`
+ <div class="kpis">
+ ${card("Total Opportunities",total)}${card("Open Opportunities",open.length)}${card("Pipeline TCV",money(pipe))}${card("Won TCV",money(wonT))}
+ ${card("Won Opportunities",won.length)}${card("Lost Opportunities",lost.length)}${card("Lost TCV",money(lost.reduce((a,x)=>a+tcv(x),0)))}${card("Average Open Days",avg)}
+ </div>
+ <div class="grid2">
+  <div class="panel"><h3>SA Performance</h3><table><thead><tr><th>SA</th><th>Total</th><th>Open</th><th>Open TCV</th><th>Won</th><th>Won TCV</th><th>Avg Open Days</th></tr></thead><tbody>${saRows}</tbody></table></div>
+  <div class="panel"><h3>Opportunity Type</h3><table><thead><tr><th>Type</th><th>Opps</th><th>TCV</th><th>Won</th></tr></thead><tbody>${typeRows}</tbody></table></div>
+ </div>
+ <div class="panel"><h3>Stage-wise Pipeline</h3><table><thead><tr><th>Stage</th><th>Opportunities</th><th>TCV</th></tr></thead><tbody>${stageRows}</tbody></table></div>`;
+}
+function card(a,b){return `<div class="card"><div class="label">${a}</div><div class="value">${b}</div></div>`}
+function toolbar(prefix,add=true){
+ return `<div class="toolbar"><input id="${prefix}Search" placeholder="Search opportunity / customer / POT ID..." oninput="refresh${prefix}()"><select id="${prefix}Type" onchange="refresh${prefix}()"><option value="">All Types</option>${TYPES.map(x=>`<option>${x}</option>`).join("")}</select><select id="${prefix}Status" onchange="refresh${prefix}()"><option value="">All Status</option>${["Open","Won","Lost","Dropped","On Hold"].map(x=>`<option>${x}</option>`).join("")}</select>${add?`<button class="btn green" onclick="openAdd()">+ Add Opportunity</button>`:""}<button class="btn secondary" onclick="${prefix==="my"?"renderMy()":"renderAll()"}">Refresh</button></div>`
+}
+function renderMy(){document.getElementById("mySheet").innerHTML=`<div class="panel"><h2>${esc(currentUser)} – Opportunity Sheet</h2>${toolbar("my")}<div id="myTable"></div></div>`;refreshmy()}
+function renderAll(){document.getElementById("opps").innerHTML=`<div class="panel"><h2>ALL OPPORTUNITIES</h2><p class="muted">Automatically consolidated from all SA users. No blank opportunity rows.</p>${toolbar("all",false)}<div id="allTable"></div></div>`;refreshall()}
+function filterData(prefix,owner=null){
+ let d=loadData(),q=(document.getElementById(prefix+"Search")?.value||"").toLowerCase(),t=document.getElementById(prefix+"Type")?.value||"",s=document.getElementById(prefix+"Status")?.value||"";
+ return d.filter(o=>(!owner||o.owner===owner)&&(!q||[o.description,o.customer,o.potId,o.bidDesk].join(" ").toLowerCase().includes(q))&&(!t||o.type===t)&&(!s||o.status===s))
+}
+function refreshmy(){let d=filterData("my",currentUser);document.getElementById("myTable").innerHTML=table(d,true)}
+function refreshall(){let d=filterData("all");document.getElementById("allTable").innerHTML=table(d,false)}
+function table(d,editable){
+ if(!d.length)return `<div class="empty">No opportunities found.</div>`;
+ return `<table><thead><tr><th>Source SA</th><th>Sr. No</th><th>Date Received</th><th>POT ID</th><th>Opportunity Description</th><th>Customer</th><th>Customer Type</th><th>Opportunity Type</th><th>Tenure</th><th>MRC</th><th>ARC</th><th>OTC</th><th>TCV</th><th>Bid Desk</th><th>Submission Due</th><th>Actual Submission</th><th>Current Stage</th><th>Submission Status</th><th>Opportunity Status</th><th>Open Days</th><th>Remarks</th>${editable?"<th>Action</th>":""}</tr></thead><tbody>${d.map((o,i)=>`<tr>
+<td>${esc(o.owner)}</td><td>${i+1}</td><td>${esc(o.dateReceived)}</td><td>${esc(o.potId)}</td><td><b>${esc(o.description)}</b></td><td>${esc(o.customer)}</td><td>${esc(o.customerType)}</td><td>${esc(o.type)}</td><td>${esc(o.tenure)}</td><td>${money(o.mrc)}</td><td>${money(arc(o))}</td><td>${money(o.otc)}</td><td><b>${money(tcv(o))}</b></td><td>${esc(o.bidDesk)}</td><td>${esc(o.dueDate)}</td><td>${esc(o.actualDate)}</td><td>${esc(o.stage)}</td><td>${esc(o.submissionStatus)}</td><td class="${statusClass(o.status)}">${esc(o.status)}</td><td>${openDays(o)}</td><td>${esc(o.remarks)}</td>${editable?`<td><button class="btn secondary" onclick="editOpp('${o.id}')">Edit</button> <button class="btn danger" onclick="deleteOpp('${o.id}')">Delete</button></td>`:""}</tr>`).join("")}</tbody></table>`
+}
+function openAdd(){editingId=null;showForm({owner:currentUser,status:"Open",submissionStatus:"Not Started"},"Add Opportunity")}
+function editOpp(id){let o=loadData().find(x=>x.id===id);if(!o||o.owner!==currentUser)return alert("You can modify only your own opportunities.");editingId=id;showForm(o,"Edit Opportunity")}
+function showForm(o,title){
+ document.getElementById("modalTitle").textContent=title;
+ let fields=FIELDS.map(([k,l,t,opts])=>{
+  let v=o[k]??"";
+  if(k==="arc"||k==="tcv")return "";
+  let input=t==="select"?`<select id="f_${k}"><option value=""></option>${opts.map(x=>`<option ${v===x?"selected":""}>${x}</option>`).join("")}</select>`:t==="textarea"?`<textarea id="f_${k}">${esc(v)}</textarea>`:`<input id="f_${k}" type="${t}" value="${esc(v)}">`;
+  return `<div class="field ${t==="textarea"?"full":""}"><label>${l}</label>${input}</div>`
+ }).join("");
+ document.getElementById("formArea").innerHTML=`<div class="form-grid">${fields}</div><div style="margin-top:14px"><button class="btn green" onclick="saveOpp()">Save Opportunity</button></div>`;
+ document.getElementById("modal").classList.add("show")
+}
+function closeModal(){document.getElementById("modal").classList.remove("show")}
+async function saveOpp(){
+ let o={owner:currentUser,status:"Open",submissionStatus:"Not Started"};
+ FIELDS.forEach(([k])=>{let e=document.getElementById("f_"+k);if(e)o[k]=e.value});
+ if(!o.description.trim())return alert("Opportunity Description is required.");
+ try{
+  if(editingId){await oppsCol.doc(editingId).update(o)}
+  else{await oppsCol.add(o)}
+  closeModal(); // live sync (onSnapshot) auto-refreshes the tables/dashboard for everyone
+ }catch(e){alert("Could not save to the cloud database: "+e.message)}
+}
+async function deleteOpp(id){
+ let o=DATA.find(x=>x.id===id);
+ if(!o||o.owner!==currentUser)return alert("You can modify only your own opportunities.");
+ if(!confirm("Delete this opportunity?"))return;
+ try{await oppsCol.doc(id).delete()}catch(e){alert("Could not delete: "+e.message)}
+}
+function renderSettings(){
+ document.getElementById("settings").innerHTML=`<div class="panel"><h2>Admin / Data Management</h2>
+ <p><b>Storage:</b> Cloud Database (Firebase Firestore – free tier).</p>
+ <p class="muted">Every SA's browser connects to the same cloud database. Any opportunity added, edited or deleted by any user is visible to Admin (and everyone else) instantly, on any device, with no manual sync needed.</p>
+ <button class="btn" onclick="exportJSON()">Export Backup</button>
+ <button class="btn secondary" onclick="document.getElementById('importFile').click()">Import Backup</button>
+ <input id="importFile" type="file" accept=".json" style="display:none" onchange="importJSON(event)">
+ <button class="btn danger" onclick="clearAll()">Clear All Cloud Data</button>
+ </div>`
+}
+function exportJSON(){let blob=new Blob([JSON.stringify(loadData(),null,2)],{type:"application/json"}),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="SA_Opportunity_Backup.json";a.click()}
+function importJSON(e){
+ let f=e.target.files[0];if(!f)return;
+ let r=new FileReader();
+ r.onload=async()=>{
+  try{
+   let d=JSON.parse(r.result);
+   if(!Array.isArray(d))throw 0;
+   for(let i=0;i<d.length;i+=450){ // Firestore batch write limit is 500 ops
+    const chunk=d.slice(i,i+450), batch=db.batch();
+    chunk.forEach(o=>{const {id,...rest}=o; batch.set(oppsCol.doc(),rest)});
+    await batch.commit();
+   }
+   alert("Backup imported into the cloud database.");showView("dashboard")
+  }catch(x){alert("Invalid backup file or import failed: "+x.message)}
+ };
+ r.readAsText(f)
+}
+async function clearAll(){
+ if(currentUser!=="Admin")return;
+ if(!confirm("Delete ALL data from the cloud database? This affects every user and cannot be undone."))return;
+ try{
+  const snap=await oppsCol.get();
+  for(let i=0;i<snap.docs.length;i+=450){
+   const batch=db.batch();
+   snap.docs.slice(i,i+450).forEach(d=>batch.delete(d.ref));
+   await batch.commit();
+  }
+ }catch(e){alert("Clear failed: "+e.message)}
+}
+function init(){let s=document.getElementById("loginSelect");Object.keys(USERS).forEach(u=>s.innerHTML+=`<option>${u}</option>`);startSync()}
+init();
+</script>
+</body>
+</html>
